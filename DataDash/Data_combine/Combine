@@ -1,0 +1,56 @@
+import pandas as pd
+from sqlalchemy import create_engine
+import plotly.express as px
+import plotly.graph_objects as go
+
+
+# Form a connection with the server
+value = 'fv160000'
+dff = pd.read_sql_query(
+        'SELECT Root, WER, CER, Truth, Predicted FROM WER_Sentence WHERE Root = "{}"'.format(value),
+        engine)
+
+# convert just columns "a" and "b"
+dff[["WER", "CER"]] = dff[["WER", "CER"]].apply(pd.to_numeric)
+dff
+dff['WER'].where(dff['WER'] == 0, 0.00001, inplace=True)
+dff
+fig  = px.bar(dff, y = ['WER', 'CER'], hover_data=['Truth', 'Predicted'] , barmode= 'group')
+
+# WER per sentence cleaning
+df = pd.read_csv('WER_Per_Sentence.csv')
+df.rename(columns={'fn000520-dataframe.csv': 'Root'}, inplace=True)
+df['Root'] = df['Root'].str.replace('-dataframe.csv', '')
+#df.to_csv('Wer_Sentence.csv', index = False)
+#Push to database meest efficient
+#df.to_sql('WER_Sentence', con=engine, chunksize=1000)
+
+dff = pd.read_csv('output_lm.csv')
+dff.head()
+dff.rename(columns={'fn000678-Copy1.csv': 'Root'}, inplace=True)
+dff = dff.drop(['Unnamed: 1' , 'Unnamed: 0.1'], axis= 1)
+dff['Root'] = dff['Root'].str.replace('-Copy1.csv', '')
+dff.to_csv('lm_scores.csv', index = False)
+
+# Combine the different datasets to sync the sources
+speak_nl = pd.read_csv('speakers.csv', sep='\t')
+rec_nl = pd.read_csv('recordings.csv', sep='\t')
+speak_vl = pd.read_csv('speakers_vl.csv', sep='\t')
+rec_vl = pd.read_csv('recordings_vl.csv', sep='\t')
+speak = speak_nl.append(speak_vl, ignore_index=True)
+rec = rec_nl.append(rec_vl, ignore_index=True)
+
+speak = speak[['RegionSpeaker' , 'BirthPlace' ]]
+speak.rename(columns={'RegionSpeaker': 'SpeakerID'}, inplace=True)
+
+# Clean the WER file and add the background info
+wer = pd.read_csv('Total WER-scores.csv')
+wer.rename(columns={'file': 'Root'}, inplace=True)
+
+wer = pd.merge(wer, rec, on='Root')
+wer = pd.merge(wer , speak, on='SpeakerID')
+
+wer = wer.drop(['Unnamed: 0' , 'Group' , 'CEF', 'DialectRegion', 'Duration (seconds)' , 'Duration (days)'], axis=1)
+wer.loc[wer['BirthPlace'].str.contains('N-', na=False), 'BirthPlace'] = 'NL'
+wer.loc[wer['BirthPlace'].str.contains('B-', na=False), 'BirthPlace'] = 'BEL'
+wer.to_csv("WER_CER.csv", index= False)

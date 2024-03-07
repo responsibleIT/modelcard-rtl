@@ -1,0 +1,20 @@
+from transformers import AutoProcessor, AutoModelForCTC
+from datasets import load_dataset
+import torch
+import soundfile as sf
+processor = AutoProcessor.from_pretrained("FremyCompany/xls-r-2b-nl-v2_lm-5gram-os")
+model = AutoModelForCTC.from_pretrained("FremyCompany/xls-r-2b-nl-v2_lm-5gram-os")
+
+dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
+dataset = dataset.sort("id")
+sampling_rate = dataset.features["audio"].sampling_rate
+# audio file is decoded on the fly
+inputs = processor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
+with torch.no_grad():
+    logits = model(**inputs).logits
+predicted_ids = torch.argmax(logits, dim=-1)
+
+# transcribe speech
+transcription = processor.batch_decode(predicted_ids) 
+transcription[0]
+'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
